@@ -1,0 +1,71 @@
+name: Encode Audio (MP3 320kbps, diff only)
+
+on:
+  push:
+    paths:
+      - 'music/*.wav'
+
+jobs:
+  encode:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. リポジトリ取得（差分比較のため履歴も取る）
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2. ffmpegセットアップ（専用Action）
+      - name: Setup FFmpeg
+        uses: federicocarboni/setup-ffmpeg@v3
+
+      # 3. 差分wavファイル取得
+      - name: Get changed wav files
+        id: changed
+        run: |
+          before="${{ github.event.before }}"
+          after="${{ github.sha }}"
+
+          files=$(git diff --name-only "$before" "$after" | grep '^wav/.*\.wav$' || true)
+
+          echo "Changed files:"
+          echo "$files"
+
+          # 改行区切りのまま出力
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$files" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # 4. エンコード（差分のみ）
+      - name: Encode to MP3 320kbps
+        if: steps.changed.outputs.files != ''
+        run: |
+          mkdir -p encoded
+
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+
+            name=$(basename "$f" .wav)
+            out="mp3/$name.mp3"
+
+            echo "Encoding $f -> $out"
+
+            ffmpeg -y -i "$f" -codec:a libmp3lame -b:a 320k "$out"
+
+          done <<< "${{ steps.changed.outputs.files }}"
+
+      # 5. 変更があればコミット＆push
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add encoded/
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto encode MP3 (320kbps)"
+            git push
+          fi
