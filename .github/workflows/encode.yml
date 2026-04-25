@@ -47,7 +47,7 @@ jobs:
             [ -z "$f" ] && continue
 
             name=$(basename "$f" .wav)
-            out="mp3/$name.mp3"
+            out="encoded/$name.mp3"
 
             echo "Encoding $f -> $out"
 
